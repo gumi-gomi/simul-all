@@ -1,0 +1,45 @@
+{
+  "name": "capacitor_polarized",
+  "w": 80,
+  "h": 40,
+
+  "ports": [
+    { "id": "1", "x": 0,  "y": 20 },
+    { "id": "2", "x": 80, "y": 20 }
+  ],
+
+  "draw": [
+
+    { "type": "line", "x1": 0,  "y1": 20, "x2": 30, "y2": 20 },
+
+    {
+      "type": "line",
+      "x1": 30, "y1": 8,
+      "x2": 30, "y2": 32,
+      "strokeWidth": 2
+    },
+
+
+    {
+      "type": "path",
+      "d": "M 50 8 A 12 12 0 0 1 50 32",
+      "strokeWidth": 2
+    },
+
+    { "type": "line", "x1": 50, "y1": 20, "x2": 80, "y2": 20 },
+
+
+    {
+      "type": "line",
+      "x1": 56, "y1": 14,
+      "x2": 56, "y2": 26,
+      "strokeWidth": 2
+    },
+    {
+      "type": "line",
+      "x1": 51, "y1": 20,
+      "x2": 61, "y2": 20,
+      "strokeWidth": 2
+    }
+  ]
+}

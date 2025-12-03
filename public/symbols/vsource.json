@@ -1,0 +1,56 @@
+{
+  "name": "vsource",
+  "w": 60,
+  "h": 100,
+
+  "ports": [
+    { "id": "+", "x": 30, "y": 0 },
+    { "id": "-", "x": 30, "y": 100 }
+  ],
+
+  "draw": [
+  
+    {
+      "type": "line",
+      "x1": 30,
+      "y1": 0,
+      "x2": 30,
+      "y2": 25
+    },
+
+ 
+    {
+      "type": "line",
+      "x1": 30,
+      "y1": 75,
+      "x2": 30,
+      "y2": 100
+    },
+
+ 
+    {
+      "type": "circle",
+      "cx": 30,
+      "cy": 50,
+      "r": 25
+    },
+
+    
+    {
+      "type": "text",
+      "x": 30,
+      "y": 35,
+      "text": "+",
+      "fontSize": 16,
+      "textAnchor": "middle"
+    },
+    {
+      "type": "text",
+      "x": 30,
+      "y": 65,
+      "text": "-",
+      "fontSize": 16,
+      "textAnchor": "middle"
+    }
+  ]
+}
