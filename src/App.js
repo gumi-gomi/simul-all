@@ -395,7 +395,7 @@ async function runSimulation() {
       </div>
 
       {/* ==== 시뮬레이션 출력 ==== */}
-      <Simulbox>
+   {/*    <Simulbox>
         <div style={{ padding: 16 }}>
           <button onClick={runSimulation}>⚡ 시뮬레이션 실행</button>
           <pre
@@ -412,12 +412,12 @@ async function runSimulation() {
             {simOutput || "시뮬레이션 결과가 여기에 표시됩니다."}
           </pre>
         </div>
-      </Simulbox>
+      </Simulbox> */}
 
       {/* ==== 그래프 ==== */}
-      <GraphBox>
+    {/*   <GraphBox>
         <SimulationGraph simOutput={simOutput} />
-      </GraphBox>
+      </GraphBox> */}
     </>
   );
 }
