@@ -1,0 +1,37 @@
+{
+  "name": "pnp",
+  "mode": "raw",
+  "w": 60,
+  "h": 110,
+
+  "ports": [
+    { "id": "B", "x": 15, "y": 55 },
+    { "id": "C", "x": 50, "y": 20 },
+    { "id": "E", "x": 50, "y": 90 }
+  ],
+
+  "draw": [
+    { "type": "line", "x1": 30, "y1": 20,  "x2": 30, "y2": 90, "stroke": "#333", "strokeWidth": 3 },
+
+    { "type": "line", "x1": 20, "y1": 60, "x2": 30, "y2": 60, "stroke": "#333", "strokeWidth": 3 },
+
+    { "type": "line", "x1": 30, "y1": 40, "x2": 50, "y2": 30, "stroke": "#333", "strokeWidth": 3 },
+
+    { "type": "line", "x1": 50, "y1": 30, "x2": 50, "y2": 20, "stroke": "#333", "strokeWidth": 3 },
+
+    { "type": "line", "x1": 30, "y1": 70, "x2": 50, "y2": 80, "stroke": "#333", "strokeWidth": 3 },
+
+    { "type": "line", "x1": 50, "y1": 80, "x2": 50, "y2": 95, "stroke": "#333", "strokeWidth": 3 },
+
+   
+    {
+      "type": "polygon",
+      "points": [
+        { "x": 43, "y": 28 },  
+        { "x": 33, "y": 36 },  
+        { "x": 43, "y": 44 }  
+      ],
+      "fill": "#333"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "vsource",
+  "w": 60,
+  "h": 100,
+
+  "ports": [
+    { "id": "+", "x": 30, "y": 0 },
+    { "id": "-", "x": 30, "y": 100 }
+  ],
+
+  "draw": [
+    { "type": "line", "x1": 30, "y1": 0, "x2": 30, "y2": 25, "strokeWidth": 2 },
+
+    { "type": "line", "x1": 30, "y1": 75, "x2": 30, "y2": 100, "strokeWidth": 2 },
+
+    {
+      "type": "circle",
+      "cx": 30,
+      "cy": 50,
+      "r": 25,
+      "strokeWidth": 2,
+      "fill": "none"
+    },
+
+    { "type": "line", "x1": 30, "y1": 38, "x2": 30, "y2": 48, "strokeWidth": 3 },
+    { "type": "line", "x1": 25, "y1": 43, "x2": 35, "y2": 43, "strokeWidth": 3 },
+
+  
+    { "type": "line", "x1": 25, "y1": 57, "x2": 35, "y2": 57, "strokeWidth": 3 }
+  ]
+}

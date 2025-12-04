@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/simul/static/css/main.93a0497a.css",
+    "main.js": "/simul/static/js/main.ef6c8ee3.js",
+    "index.html": "/simul/index.html",
+    "main.93a0497a.css.map": "/simul/static/css/main.93a0497a.css.map",
+    "main.ef6c8ee3.js.map": "/simul/static/js/main.ef6c8ee3.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.93a0497a.css",
+    "static/js/main.ef6c8ee3.js"
+  ]
+}
