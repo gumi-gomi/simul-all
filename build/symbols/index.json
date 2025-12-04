@@ -1,0 +1,21 @@
+[
+  "resistor.json",
+  "capacitor.json",
+  "capacitor_polarized.json",
+  "inductor.json",
+  "diode.json",
+  "zener.json",
+  "led.json",
+  "npn.json",
+  "pnp.json",
+  "nmos.json",
+  "pmos.json",
+  "vsource.json",
+  "isource.json",
+  "ground.json",
+  "transformer.json",
+  "opamp.json",
+  "crystal.json"
+
+]
+  
