@@ -9,48 +9,23 @@
   ],
 
   "draw": [
-  
-    {
-      "type": "line",
-      "x1": 30,
-      "y1": 0,
-      "x2": 30,
-      "y2": 25
-    },
+    { "type": "line", "x1": 30, "y1": 0, "x2": 30, "y2": 25, "strokeWidth": 2 },
 
- 
-    {
-      "type": "line",
-      "x1": 30,
-      "y1": 75,
-      "x2": 30,
-      "y2": 100
-    },
+    { "type": "line", "x1": 30, "y1": 75, "x2": 30, "y2": 100, "strokeWidth": 2 },
 
- 
     {
       "type": "circle",
       "cx": 30,
       "cy": 50,
-      "r": 25
+      "r": 25,
+      "strokeWidth": 2,
+      "fill": "none"
     },
 
-    
-    {
-      "type": "text",
-      "x": 30,
-      "y": 35,
-      "text": "+",
-      "fontSize": 16,
-      "textAnchor": "middle"
-    },
-    {
-      "type": "text",
-      "x": 30,
-      "y": 65,
-      "text": "-",
-      "fontSize": 16,
-      "textAnchor": "middle"
-    }
+    { "type": "line", "x1": 30, "y1": 38, "x2": 30, "y2": 48, "strokeWidth": 3 },
+    { "type": "line", "x1": 25, "y1": 43, "x2": 35, "y2": 43, "strokeWidth": 3 },
+
+  
+    { "type": "line", "x1": 25, "y1": 57, "x2": 35, "y2": 57, "strokeWidth": 3 }
   ]
 }

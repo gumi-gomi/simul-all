@@ -232,8 +232,8 @@ export default function App() {
     async function init() {
       await loadJsonSymbolPackages();
       rebuildGPTLib();
-      console.log("Loaded JSON symbols:", Object.keys(DRAW_LIB));
-      console.log("GPT_LIB keys:", Object.keys(GPT_LIB)); // 확인용
+     /*  console.log("Loaded JSON symbols:", Object.keys(DRAW_LIB));
+      console.log("GPT_LIB keys:", Object.keys(GPT_LIB)); */
        forceUpdate();
     }
     init();

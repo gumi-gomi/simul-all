@@ -57,92 +57,62 @@ const DEFAULTS = {
 const fmtVal = (v) => (typeof v === "number" ? String(v) : (v ?? ""));
 
 /** ===== Node 계산: 포트 좌표 기반 ===== */
-function computeNodes(elements, wires, drawLib, grid = 10) {
-  const dsu = new DSU();
-  const anchors = []; // {key, x,y, elId, portId}
+function computeNodes(elements, wires, drawLib) {
 
-  // 요소 포트 → 절대좌표
+  // === 1) DSU ===
+  const pkey = (elId, portId) => `P:${elId}:${portId}`;
+  const parents = {};
+  const find = (x) => (parents[x] === x ? x : (parents[x] = find(parents[x])));
+  const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parents[b] = a; };
+
+  // === 2) 모든 포트 등록 ===
   for (const el of elements) {
-    const sym = drawLib[el.type];
-    if (!sym || !Array.isArray(sym.ports)) continue;
-    for (const p of sym.ports) {
-      let ax = el.x + p.x, ay = el.y + p.y;
-
-      const rot = (el.rot || 0) % 360;
-      if (rot === 90) { ax = el.x + p.y; ay = el.y + (sym.w - p.x); }
-      else if (rot === 180) { ax = el.x + (sym.w - p.x); ay = el.y + (sym.h - p.y); }
-      else if (rot === 270) { ax = el.x + (sym.h - p.y); ay = el.y + p.x; }
-
-      ax = Math.round(ax / grid) * grid;
-      ay = Math.round(ay / grid) * grid;
-
-      anchors.push({ key: `P:${el.id}:${p.id}`, x: ax, y: ay });
+    const def = drawLib[el.type];
+    if (!def?.ports) continue;
+    for (const p of def.ports) {
+      const k = pkey(el.id, p.id);
+      parents[k] = k;
     }
   }
 
-  // 포트끼리 같은 좌표 → union
-  const mapAt = new Map();
-  for (const a of anchors) {
-    const k = `${a.x},${a.y}`;
-    if (!mapAt.has(k)) mapAt.set(k, []);
-    mapAt.get(k).push(a.key);
-  }
-  for (const arr of mapAt.values()) {
-    for (let i = 1; i < arr.length; i++) dsu.union(arr[0], arr[i]);
+  // === 3) wires → union(elId, portId) ===
+  for (const w of wires) {
+    const a = pkey(w.a.el, w.a.portId);
+    const b = pkey(w.b.el, w.b.portId);
+    if (parents[a] && parents[b]) union(a, b);
   }
 
-  // 와이어 점 → 포트와 같은 좌표면 union
-  const wirePoints = [];
-  for (const w of wires || []) {
-    if (Array.isArray(w.points)) {
-      for (const pt of w.points)
-        wirePoints.push({ x: Math.round(pt.x / grid) * grid, y: Math.round(pt.y / grid) * grid });
-    } else {
-      const x1 = Math.round((w.x1 ?? 0) / grid) * grid;
-      const y1 = Math.round((w.y1 ?? 0) / grid) * grid;
-      const x2 = Math.round((w.x2 ?? 0) / grid) * grid;
-      const y2 = Math.round((w.y2 ?? 0) / grid) * grid;
-      wirePoints.push({ x: x1, y: y1 }, { x: x2, y: y2 });
+  // === 4) 대표 group ===
+  const repGroups = {};
+  for (const k of Object.keys(parents)) {
+    const r = find(k);
+    (repGroups[r] ??= []).push(k);
+  }
+
+  // === 5) ground 처리 ===
+  const repToNode = {};
+  let seq = 1;
+  for (const [rep, keys] of Object.entries(repGroups)) {
+    const hasGnd = keys.some(k => {
+      const parts = k.split(":"); // ["P","elId","portId"]
+      const elId = parts[1];
+      const pid = parts[2];
+      const el = elements.find(e => e.id === elId);
+      return drawLib[el.type]?.name === "ground" || pid === "0";
+    });
+
+    repToNode[rep] = hasGnd ? "0" : `N${seq++}`;
+  }
+
+  // === 6) getNode(key) 반환 ===
+  return {
+    getNode: (key) => {
+      const r = find(key);
+      return repToNode[r];
     }
-  }
-
-  const anchorAt = new Map();
-  for (const a of anchors) {
-    const k = `${a.x},${a.y}`;
-    if (!anchorAt.has(k)) anchorAt.set(k, []);
-    anchorAt.get(k).push(a.key);
-  }
-  for (const wp of wirePoints) {
-    const k = `${wp.x},${wp.y}`;
-    const arr = anchorAt.get(k);
-    if (!arr) continue;
-    for (let i = 1; i < arr.length; i++) dsu.union(arr[0], arr[i]);
-  }
-
-  // 그라운드 인식
-  const ground = "GNDROOT";
-  dsu.union(ground, ground);
-
-  const groundRoots = new Set();
-  for (const el of elements) {
-    if (el.type !== "ground") continue;
-    const pk = `P:${el.id}:GND`;
-    dsu.union(pk, ground);
-    groundRoots.add(dsu.find(pk));
-  }
-
-  // 네트 이름 부여
-  const roots = new Map();
-  let idx = 1;
-  const getNode = (key) => {
-    const r = dsu.find(key);
-    if (r === ground || groundRoots.has(r)) return "0";
-    if (!roots.has(r)) roots.set(r, `N${idx++}`);
-    return roots.get(r);
   };
-
-  return { getNode };
 }
+
 
 /** ===== 모델 문자열 ===== */
 function modelLine(kind, name, params = {}) {
@@ -217,6 +187,24 @@ export function generateNetlist(elements, wires, drawLib, opts = {}) {
       lines.push(s);
       continue;
     }
+    /**  crystal */
+    if (t === "crystal") {
+  const name = `X${++ref.X}`;
+  const a = ports["1"];
+  const b = ports["2"];
+  lines.push(`${name} ${a} ${b} CRYSTAL`);
+  models.add(`
+.subckt CRYSTAL 1 2
+R1 1 3 30
+C1 1 3 0.01p
+L1 3 4 0.1H
+C2 4 2 0.02p
+.ends CRYSTAL
+  `.trim());
+  continue;
+}
+
+
 
     /** 5) ISource */
     if (t === "isource") {

@@ -13,8 +13,14 @@ const PORT_R = 4;
 
 /** ===== 유틸 ===== */
 const snap = (v) => Math.round(v / GRID) * GRID;
+// 회전 금지 기본 리스트(기존 유지)
 const NO_ROTATE = ["npn", "pnp", "nmos", "pmos", "opamp", "transformer"];
 
+// ▶ raw 심볼 감지: def.mode === "raw" 또는 def.raw === true
+function isRawSymbol(type) {
+  const def = DRAW_LIB[type];
+  return !!(def && (def.mode === "raw" || def.raw === true));
+}
 
 function uid(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -57,8 +63,16 @@ function rotatePointAroundCenter(rel, def, rotDeg) {
     y: cy + dx * Math.sin(rad) + dy * Math.cos(rad),
   };
 }
+
+// ▶ 원점 보정: raw 심볼은 스냅만 하고 보정/회전 기준 정렬 안 함
 function alignOriginForPorts(type, rot, x, y) {
   const def = DRAW_LIB[type];
+  if (!def) return { x, y };
+  if (isRawSymbol(type)) {
+    // raw: 사용자가 둔 좌표를 그대로, 그리드에만 맞춘다
+    return { x: snap(x), y: snap(y) };
+  }
+  // 기존 보정 (첫 포트를 스냅 기준으로 정렬)
   const first = def.ports[0];
   const pr = rotatePointAroundCenter({ x: first.x, y: first.y }, def, rot);
   const wantX = snap(x + pr.x);
@@ -69,14 +83,13 @@ function alignOriginForPorts(type, rot, x, y) {
 }
 
 function clientToSvg(evt, svgEl) {
-   const pt = svgEl.createSVGPoint();
-   pt.x = evt.clientX;
-   pt.y = evt.clientY;
-   const ctm = svgEl.getScreenCTM();
-   const ipt = pt.matrixTransform(ctm.inverse());
-   return { x: ipt.x, y: ipt.y };
- }
-
+  const pt = svgEl.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  const ctm = svgEl.getScreenCTM();
+  const ipt = pt.matrixTransform(ctm.inverse());
+  return { x: ipt.x, y: ipt.y };
+}
 
 /** ====== BBox 계산 ====== */
 function computeElementBBox(el) {
@@ -140,26 +153,35 @@ export default function CircuitCanvas({
     return box;
   }
 
-  /** 포트 위치/극성 */
- function portAbsolutePosition(el, port) {
-  const def = DRAW_LIB[el.type];
-  if (!def) return { x: el.x, y: el.y };
-  if (!port) {
-    console.warn("Invalid port access:", el.type, el.id);
-    return { x: el.x, y: el.y };
+  /** 포트 절대 위치 */
+  function portAbsolutePosition(el, port) {
+    const def = DRAW_LIB[el.type];
+    if (!def) return { x: el.x, y: el.y };
+    if (!port) {
+      console.warn("Invalid port access:", el.type, el.id);
+      return { x: el.x, y: el.y };
+    }
+
+    // ▶ raw 심볼: 회전/중심 보정 없이 JSON 좌표 그대로 + 스냅
+    if (isRawSymbol(el.type)) {
+      return {
+        x: snap(el.x + port.x),
+        y: snap(el.y + port.y),
+      };
+    }
+
+    // ▶ 일반 심볼: 기존 회전 로직 그대로
+    const rad = (el.rot * Math.PI) / 180;
+    const cx = el.x + def.w / 2;
+    const cy = el.y + def.h / 2;
+    const dx = port.x - def.w / 2;
+    const dy = port.y - def.h / 2;
+
+    return {
+      x: snap(cx + dx * Math.cos(rad) - dy * Math.sin(rad)),
+      y: snap(cy + dx * Math.sin(rad) + dy * Math.cos(rad)),
+    };
   }
-
-  const rad = (el.rot * Math.PI) / 180;
-  const cx = el.x + def.w / 2;
-  const cy = el.y + def.h / 2;
-  const dx = port.x - def.w / 2;
-  const dy = port.y - def.h / 2;
-
-  return {
-    x: snap(cx + dx * Math.cos(rad) - dy * Math.sin(rad)),
-    y: snap(cy + dx * Math.sin(rad) + dy * Math.cos(rad)),
-  };
-}
 
   function getRotatedVoltagePolarity(el) {
     const def = DRAW_LIB[el.type];
@@ -175,17 +197,19 @@ export default function CircuitCanvas({
     if (rot === 270) return pPlus.x < pMinus.x ? { vp: "+", vn: "-" } : { vp: "-", vn: "+" };
     return { vp: "+", vn: "-" };
   }
+
   function startPosOf(wireEnd) {
     const el = elements.find((e) => e.id === wireEnd.el);
     if (!el) return { x: 0, y: 0 };
     const def = DRAW_LIB[el.type];
     const port = def.ports.find((p) => p.id === wireEnd.portId);
-if (!port) {
-  console.warn("Wire refers to missing port:", wireEnd);
-  return { x: el.x, y: el.y };
-}
-return portAbsolutePosition(el, port);
+    if (!port) {
+      console.warn("Wire refers to missing port:", wireEnd);
+      return { x: el.x, y: el.y };
+    }
+    return portAbsolutePosition(el, port);
   }
+
   function stableOrthogonalPath(a, b, mode) {
     if (!mode) return bestOrthogonal(a, b);
     if (mode === "h") return [a.x, a.y, b.x, a.y, b.x, b.y];
@@ -213,7 +237,7 @@ return portAbsolutePosition(el, port);
   /** 마우스 핸들러 */
   const onMouseDownPart = (e, el) => {
     e.stopPropagation();
-    const pt = clientToSvg(e, svgRef.current, pan, zoom);
+    const pt = clientToSvg(e, svgRef.current);
 
     if (!selected.includes(el.id)) {
       if (e.shiftKey) {
@@ -236,13 +260,13 @@ return portAbsolutePosition(el, port);
   };
 
   const onMouseDownBoard = (e) => {
-    const pt = clientToSvg(e, svgRef.current, pan, zoom);
+    const pt = clientToSvg(e, svgRef.current);
     setBoxStart(pt);
     setBox({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
   };
 
   const onMouseMove = (e) => {
-    const pt = clientToSvg(e, svgRef.current, pan, zoom);
+    const pt = clientToSvg(e, svgRef.current);
 
     if (connectFrom) {
       setMousePos({ x: pt.x, y: pt.y });
@@ -272,7 +296,11 @@ return portAbsolutePosition(el, port);
 
         const rawX = start.x + dx;
         const rawY = start.y + dy;
-        const aligned = alignOriginForPorts(start.type, start.rot, rawX, rawY);
+
+        // ▶ raw 심볼은 원점 보정 제외(스냅만 유지)
+        const aligned = isRawSymbol(start.type)
+          ? { x: snap(rawX), y: snap(rawY) }
+          : alignOriginForPorts(start.type, start.rot, rawX, rawY);
 
         if (inspector && inspector.id === it.id) {
           newPos = { x: aligned.x, y: aligned.y };
@@ -291,9 +319,12 @@ return portAbsolutePosition(el, port);
       const y1 = Math.min(box.y1, box.y2);
       const x2 = Math.max(box.x1, box.x2);
       const y2 = Math.max(box.y1, box.y2);
-      const ids = elements
-        .filter((el) => el.x >= x1 && el.x <= x2 && el.y >= y1 && el.y <= y2)
-        .map((el) => el.id);
+     const ids = elements
+  .filter((el) => 
+    el.x >= x1 && el.x <= x2 &&
+    el.y >= y1 && el.y <= y2
+  )
+  .map((el) => el.id);
       setSelected(ids);
       setBox(null);
       setBoxStart(null);
@@ -326,40 +357,32 @@ return portAbsolutePosition(el, port);
       setSelected([]);
       return;
     }
-   if (e.key === "r" || e.key === "R") {
-  setElements((els) =>
-    els.map((it) => {
-      if (!selected.includes(it.id)) return it;
-
-      if (NO_ROTATE.includes(it.type)) {
-        return it; // 회전 금지
-      }
-
-      const nextRot = (it.rot + 90) % 360;
-      const aligned = alignOriginForPorts(it.type, nextRot, it.x, it.y);
-      return { ...it, rot: nextRot, x: aligned.x, y: aligned.y };
-    })
-  );
-}
-
+    if (e.key === "r" || e.key === "R") {
+      setElements((els) =>
+        els.map((it) => {
+          if (!selected.includes(it.id)) return it;
+          // 회전 금지(기존 유지) + raw 심볼도 회전 금지
+          if (NO_ROTATE.includes(it.type) || isRawSymbol(it.type)) return it;
+          const nextRot = (it.rot + 90) % 360;
+          const aligned = alignOriginForPorts(it.type, nextRot, it.x, it.y);
+          return { ...it, rot: nextRot, x: aligned.x, y: aligned.y };
+        })
+      );
+    }
   };
 
   /** 포트 연결 */
   const handlePortMouseDown = (e, elId, portId) => {
     e.stopPropagation();
 
-    e.stopPropagation();
-
-  // 🛡 안전 코드 시작 — 맨 앞에 추가
-  const el = elements.find(e => e.id === elId);
-  if (!el) return;
-
-  const def = DRAW_LIB[el.type];
-  const port = def?.ports?.find(p => p.id === portId);
-  if (!port) {
-    console.warn("Clicked invalid port:", elId, portId);
-    return;
-  }
+    const el = elements.find((it) => it.id === elId);
+    if (!el) return;
+    const def = DRAW_LIB[el.type];
+    const port = def?.ports?.find((p) => p.id === portId);
+    if (!port) {
+      console.warn("Clicked invalid port:", elId, portId);
+      return;
+    }
 
     if (connectFrom && connectFrom.elId === elId && connectFrom.portId === portId) {
       setConnectFrom(null);
@@ -387,18 +410,14 @@ return portAbsolutePosition(el, port);
   const handlePortMouseUp = (e, elId, portId) => {
     e.stopPropagation();
 
-    e.stopPropagation();
-
-  // 🛡 안전 코드 시작 — 맨 앞에 추가
-  const el = elements.find(e => e.id === elId);
-  if (!el) return;
-
-  const def = DRAW_LIB[el.type];
-  const port = def?.ports?.find(p => p.id === portId);
-  if (!port) {
-    console.warn("Clicked invalid port:", elId, portId);
-    return;
-  }
+    const el = elements.find((it) => it.id === elId);
+    if (!el) return;
+    const def = DRAW_LIB[el.type];
+    const port = def?.ports?.find((p) => p.id === portId);
+    if (!port) {
+      console.warn("Clicked invalid port:", elId, portId);
+      return;
+    }
 
     if (!connectFrom) return;
     if (connectFrom.elId === elId && connectFrom.portId === portId) return;
@@ -410,82 +429,78 @@ return portAbsolutePosition(el, port);
     setMousePos(null);
   };
 
-  /** 휠 줌 */
+  /** 휠 줌 (Shift + wheel) */
   const handleWheel = useCallback(
-  (e) => {
-    if (!e.shiftKey) return;
-    e.preventDefault();
+    (e) => {
+      if (!e.shiftKey) return;
+      e.preventDefault();
 
-    const zoomIntensity = 0.0015;
-    const delta = -e.deltaY;
+      const zoomIntensity = 0.0015;
+      const delta = -e.deltaY;
 
-    const newZoom = Math.max(0.2, Math.min(4, zoom + delta * zoomIntensity));
-    if (newZoom === zoom) return;
+      const newZoom = Math.max(0.2, Math.min(4, zoom + delta * zoomIntensity));
+      if (newZoom === zoom) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clientX = e.clientX - rect.left;
-    const clientY = e.clientY - rect.top;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clientX = e.clientX - rect.left;
+      const clientY = e.clientY - rect.top;
 
-    // 현재 마우스 위치를 SVG 좌표로 환산
-    const svgX = (clientX - pan.x) / zoom;
-    const svgY = (clientY - pan.y) / zoom;
+      const svgX = (clientX - pan.x) / zoom;
+      const svgY = (clientY - pan.y) / zoom;
 
-    // 새로운 줌 기준으로 pan을 SVG 좌표묘로 업데이트
-    const newPanX = clientX - svgX * newZoom;
-    const newPanY = clientY - svgY * newZoom;
+      const newPanX = clientX - svgX * newZoom;
+      const newPanY = clientY - svgY * newZoom;
 
-    setPan({ x: newPanX, y: newPanY });
-    setZoom(newZoom);
-  },
-  [zoom, pan]
-);
-
+      setPan({ x: newPanX, y: newPanY });
+      setZoom(newZoom);
+    },
+    [zoom, pan]
+  );
 
   /** SVG 루트 핸들러 (패닝 포함) */
   const handleSvgMouseDown = (e) => {
-  setInspector(null);
+    setInspector(null);
 
-  if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
-    e.preventDefault();
+    if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
+      e.preventDefault();
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const startClientX = e.clientX - rect.left;
-    const startClientY = e.clientY - rect.top;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const startClientX = e.clientX - rect.left;
+      const startClientY = e.clientY - rect.top;
 
-    // SVG 좌표로 변환한 pan 기준점
-    panStart.current = {
-      clientX: startClientX,
-      clientY: startClientY,
-      svgPanX: pan.x,
-      svgPanY: pan.y,
-    };
+      panStart.current = {
+        clientX: startClientX,
+        clientY: startClientY,
+        svgPanX: pan.x,
+        svgPanY: pan.y,
+      };
 
-    setIsPanning(true);
-    return;
-  }
+      setIsPanning(true);
+      return;
+    }
 
-  onMouseDownBoard(e);
-};
+    onMouseDownBoard(e);
+  };
 
   const handleSvgMouseMove = (e) => {
-  if (isPanning) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clientX = e.clientX - rect.left;
-    const clientY = e.clientY - rect.top;
+    if (isPanning) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clientX = e.clientX - rect.left;
+      const clientY = e.clientY - rect.top;
 
-    const dx = (clientX - panStart.current.clientX) / zoom;
-    const dy = (clientY - panStart.current.clientY) / zoom;
+      const dx = (clientX - panStart.current.clientX) / zoom;
+      const dy = (clientY - panStart.current.clientY) / zoom;
 
-   setPan({
-  x: panStart.current.svgPanX + dx,
-  y: panStart.current.svgPanY + dy,
-});
+      setPan({
+        x: panStart.current.svgPanX + dx,
+        y: panStart.current.svgPanY + dy,
+      });
 
-    return;
-  }
+      return;
+    }
 
-  onMouseMove(e);
-};
+    onMouseMove(e);
+  };
 
   const handleSvgMouseUp = () => {
     setIsPanning(false);
@@ -537,19 +552,14 @@ return portAbsolutePosition(el, port);
     <div
       tabIndex={0}
       onKeyDown={handleKey}
-      style={{ width: "100%", height: "100%", outline: "none",  position: "relative",    }}
+      style={{ width: "100%", height: "100%", outline: "none", position: "relative" }}
       onWheel={handleWheel}
-      
     >
       <svg
         ref={svgRef}
         width="100%"
         height="100%"
-       viewBox={`${-pan.x / zoom} ${-pan.y / zoom} ${viewportSize.width / zoom} ${viewportSize.height / zoom}`}
-
-
-
-
+        viewBox={`${-pan.x / zoom} ${-pan.y / zoom} ${viewportSize.width / zoom} ${viewportSize.height / zoom}`}
         onMouseLeave={handleSvgMouseUp}
         style={{ zIndex: 1, background: "#fff" }}
         onMouseDown={handleSvgMouseDown}
@@ -557,7 +567,7 @@ return portAbsolutePosition(el, port);
         onMouseUp={handleSvgMouseUp}
         onDragOver={(e) => {
           e.preventDefault();
-          const pt = clientToSvg(e, svgRef.current, pan, zoom);
+          const pt = clientToSvg(e, svgRef.current);
           setDragPreview({ x: snap(pt.x), y: snap(pt.y) });
         }}
         onDrop={(e) => {
@@ -567,16 +577,19 @@ return portAbsolutePosition(el, port);
             console.error("Unknown type:", type);
             return;
           }
-          const pt = clientToSvg(e, svgRef.current, pan, zoom);
+          const pt = clientToSvg(e, svgRef.current);
           const x = snap(pt.x);
           const y = snap(pt.y);
-          const pos = alignOriginForPorts(type, 0, x, y);
+
+          // ▶ raw 심볼이면 원점 보정 없이 배치(스냅만)
+          const pos = isRawSymbol(type)
+            ? { x, y }
+            : alignOriginForPorts(type, 0, x, y);
 
           setElements((els) => [
             ...els,
             { id: uid(getIdPrefix(type)), type, x: pos.x, y: pos.y, rot: 0, value: "" },
           ]);
-          // 드래그 종료 프리뷰 제거
           setDragPreview(null);
           if (setDraggingType) setDraggingType(null);
         }}
@@ -592,9 +605,9 @@ return portAbsolutePosition(el, port);
 
         {wires.map((w) => {
           const a = startPosOf(w.a);
-const b = startPosOf(w.b);
-if (!a || !b) return null;
-const pts = bestOrthogonal(a, b);
+          const b = startPosOf(w.b);
+          if (!a || !b) return null;
+          const pts = bestOrthogonal(a, b);
           const d = `M ${pts[0]} ${pts[1]} L ${pts[2]} ${pts[3]} L ${pts[4]} ${pts[5]}`;
           return (
             <path
@@ -647,7 +660,6 @@ const pts = bestOrthogonal(a, b);
                   pointerEvents="all"
                   onMouseDown={(e) => onMouseDownPart(e, el)}
                   style={{ cursor: draggingThis ? "grabbing" : "grab" }}
-    
                 />
               );
             })()}
@@ -707,11 +719,11 @@ const pts = bestOrthogonal(a, b);
 
             {/* 포트 */}
             {(DRAW_LIB[el.type].ports || []).map((p) => {
-  if (!p || p.x === undefined || p.y === undefined) {
-    console.warn("Invalid port in symbol:", el.type, p);
-    return null;
-  }
-  const { x: rx, y: ry } = portAbsolutePosition(el, p);
+              if (!p || p.x === undefined || p.y === undefined) {
+                console.warn("Invalid port in symbol:", el.type, p);
+                return null;
+              }
+              const { x: rx, y: ry } = portAbsolutePosition(el, p);
               return (
                 <circle
                   key={`${el.id}-${p.id}`}
@@ -744,7 +756,6 @@ const pts = bestOrthogonal(a, b);
             fill="rgba(43,140,255,0.1)"
             stroke="#2b8cff"
             strokeDasharray="4 2"
-     
           />
         )}
       </svg>
@@ -769,7 +780,6 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
   const el = elements.find((e) => e.id === inspector.id);
   if (!el) return null;
 
-  // 🔥 전달된 BBox 기준으로 화면 위치 계산
   const screenX = (bbox.x + bbox.w / 2) * zoom + pan.x;
   const screenY = (bbox.y + 10) * zoom + pan.y;
 
@@ -777,7 +787,6 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
     setElements((els) => els.map((it) => (it.id === el.id ? { ...it, ...patch } : it)));
   };
 
-  // 🔥 Value가 없어야 하는 소자들
   const NO_VALUE = ["ground", "vsource", "npn", "pnp", "nmos", "pmos", "opamp", "transformer", "diode", "led", "zener"];
 
   return (
@@ -802,7 +811,6 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
         {el.id}
       </div>
 
-      {/* Value 입력창 - 필요없으면 숨김 */}
       {!NO_VALUE.includes(el.type) && (
         <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "6px", marginBottom: 10 }}>
           <div>Value</div>
@@ -814,7 +822,6 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
         </div>
       )}
 
-      {/* Rotate 버튼 (회전 금지 소자 제외) */}
       <button
         style={{
           width: "100%",
@@ -826,7 +833,7 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
           cursor: "pointer",
         }}
         onClick={() => {
-          if (["npn", "pnp", "nmos", "pmos", "opamp", "transformer"].includes(el.type)) return;
+          if (["npn", "pnp", "nmos", "pmos", "opamp", "transformer"].includes(el.type) || isRawSymbol(el.type)) return;
           updateField({ rot: (el.rot + 90) % 360 });
         }}
       >
@@ -835,4 +842,3 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
     </div>
   );
 }
-
