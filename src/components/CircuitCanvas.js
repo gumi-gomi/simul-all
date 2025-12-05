@@ -103,15 +103,61 @@ function computeElementBBox(el) {
   tempSvg.style.left = "-9999px";
   document.body.appendChild(tempSvg);
 
-  const reactNode = def.draw(el);
+  let reactNode;
+
+  // -----------------------------
+  // ① draw가 함수(asy loading)인 경우
+  // -----------------------------
+  if (typeof def.draw === "function") {
+    reactNode = def.draw(el);
+  }
+
+  // -----------------------------
+  // ② draw가 JSON 배열인 경우 → makeSvgFromShapes 사용
+  // -----------------------------
+  else if (Array.isArray(def.draw)) {
+    reactNode = (
+      <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rot || 0}, ${def.w / 2}, ${def.h / 2})`}>
+        {def.draw.map((shape, i) =>
+          React.createElement(
+            shape.type,
+            {
+              key: i,
+              ...shape,
+              stroke: shape.stroke ?? "currentColor",
+              fill: shape.fill ?? "none",
+              strokeWidth: shape.strokeWidth ?? 2
+            }
+          )
+        )}
+      </g>
+    );
+  }
+
+  // -----------------------------
+  // ③ draw가 둘 다 아니다 → 오류 회피
+  // -----------------------------
+  else {
+    console.error("Invalid draw format for:", el.type, def);
+    document.body.removeChild(tempSvg);
+    return { x: el.x, y: el.y, w: def.w, h: def.h };
+  }
+
   tempSvg.innerHTML = `<g>${ReactDOMServer.renderToStaticMarkup(reactNode)}</g>`;
   const realG = tempSvg.firstChild;
-  const box = realG.getBBox();
+
+  let box = { x: el.x, y: el.y, width: def.w, height: def.h };
+
+  try {
+    box = realG.getBBox();
+  } catch (err) {
+    console.warn("BBox failed for:", el.type, err);
+  }
 
   document.body.removeChild(tempSvg);
-
   return { x: box.x, y: box.y, w: box.width, h: box.height };
 }
+
 
 /** ====== 메인 컴포넌트 ====== */
 export default function CircuitCanvas({

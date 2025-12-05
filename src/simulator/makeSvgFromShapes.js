@@ -98,6 +98,41 @@ export function makeSvgFromShapes(json, el) {
               />
             );
 
+            case "arc": {
+  const { cx, cy, r, start, end } = shape;
+  const stroke = shape.stroke ?? "currentColor";
+  const strokeWidth = shape.strokeWidth ?? 2;
+  const fill = "none";
+
+  // 각도 → 라디안 변환
+  const startRad = (start * Math.PI) / 180;
+  const endRad   = (end * Math.PI) / 180;
+
+  // 시작/끝 좌표 계산
+  const x1 = cx + r * Math.cos(startRad);
+  const y1 = cy + r * Math.sin(startRad);
+  const x2 = cx + r * Math.cos(endRad);
+  const y2 = cy + r * Math.sin(endRad);
+
+  // SVG arc 플래그 계산
+  const largeArc = Math.abs(end - start) > 180 ? 1 : 0;
+  const sweep = end > start ? 1 : 0;
+
+  const d = `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} ${sweep} ${x2} ${y2}`;
+
+  return (
+    <path
+      key={i}
+      d={d}
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      pointerEvents="none"
+    />
+  );
+}
+
+
           default:
             return null;
         }

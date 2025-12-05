@@ -10,6 +10,8 @@ import { loadJsonSymbolPackages } from "./simulator/jsonSymbolLoader";
 import { rebuildGPTLib, GPT_LIB } from "./simulator/gptLib";
 import { runNgspice } from "./simulator/runNgspice";
 import { autoLayout } from "./simulator/autoLayout";
+import { SYMBOL_CATEGORIES } from "./simulator/symbolCategories";
+import { makeMiniSymbol } from "./simulator/makeSvgMini";
 
 
 /* ========= 시뮬레이션 박스 스타일 ========= */
@@ -196,6 +198,8 @@ export default function App() {
   const [draggingType, setDraggingType] = useState(null);
   const [simOutput, setSimOutput] = useState("");
   const [circuit, setCircuit] = useState(null);
+  const [search, setSearch] = useState("");
+
 
   function handleCircuitGenerated(json) {
   const { components, connections } = json;
@@ -314,7 +318,7 @@ async function runSimulation() {
       {/* 메인 레이아웃 */}
       <div
         style={{
-          width: "1340px",
+          width: "100%",
           margin: "0 auto",
           border: "1px solid #eee",
           borderRadius: "10px",
@@ -325,16 +329,68 @@ async function runSimulation() {
         }}
       >
         {/* ==== Toolbox ==== */}
-        <aside
-          style={{
-            padding: 12,
-            borderRight: "1px solid #eee",
-            overflowY: "auto",
-          }}
-        >
-          <h2>Toolbox</h2>
+      <aside
+  style={{
+    padding: 12,
+    borderRight: "1px solid #eee",
+    overflowY: "auto",
+    background: "#f7f7f7",
+  }}
+>
+  <input
+  type="text"
+  placeholder="Search..."
+  value={search}
+  onChange={(e) => setSearch(e.target.value)}
+  style={{
+    width: "90%",
+    padding: "6px 8px",
+    marginBottom: 8,
+    borderRadius: 4,
+    border: "1px solid #ccc",
+  }}
+/>
 
-          {Object.entries(DRAW_LIB).map(([key, s]) => (
+  {SYMBOL_CATEGORIES.map((cat) => {
+
+  // 🔎 검색 필터 적용
+  const filteredItems = cat.items.filter(key => {
+    const name = DRAW_LIB[key]?.name || key;
+    return name.toLowerCase().includes(search.toLowerCase()) ||
+           key.toLowerCase().includes(search.toLowerCase());
+  });
+
+  // 검색 결과가 없으면 카테고리 전체 숨김
+  if (filteredItems.length === 0) return null;
+
+  return (
+    <div key={cat.title} style={{ marginBottom: 15 }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: "bold",
+          padding: "4px 6px",
+          background: "#505a66",
+          color: "#fff",
+          borderRadius: 4,
+          marginBottom: 6,
+        }}
+      >
+        {cat.title}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 6,
+        }}
+      >
+        {filteredItems.map((key) => {
+          const def = DRAW_LIB[key];
+          if (!def) return null;
+
+          return (
             <div
               key={key}
               draggable
@@ -354,34 +410,33 @@ async function runSimulation() {
                   },
                 ])
               }
-              style={{ cursor: "grab", fontSize: 12, padding: 4 }}
+              style={{
+                width: 55,
+                height: 55,
+                background: "#fff",
+                border: "1px solid #ccc",
+                borderRadius: 4,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "grab",
+                transition: "0.15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#eef3ff")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+              title={def.name || key}
             >
-              🔹 {s.name || key}
+              {makeMiniSymbol(key)}
             </div>
-          ))}
-           <button
-    style={{
-      marginTop: 20,
-      padding: "8px 10px",
-      width: "100%",
-      borderRadius: 6,
-      border: "1px solid #ccc",
-      background: "#fafafa",
-      cursor: "pointer",
-    }}
-    onClick={() => {
-      try {
-        const net = generateNetlist(elements, wires, DRAW_LIB);
-        console.log("🔍 SPICE NETLIST\n" + net);
-        alert("콘솔에서 SPICE netlist를 확인하세요.");
-      } catch (err) {
-        console.error("netlist error:", err);
-      }
-    }}
-  >
-    📝 Netlist 출력
-  </button>
-        </aside>
+          );
+        })}
+      </div>
+    </div>
+  );
+})}
+
+</aside>
+
 
         {/* ==== Canvas ==== */}
         <CircuitCanvas

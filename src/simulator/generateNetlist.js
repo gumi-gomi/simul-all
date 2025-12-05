@@ -59,13 +59,22 @@ const fmtVal = (v) => (typeof v === "number" ? String(v) : (v ?? ""));
 /** ===== Node 계산: 포트 좌표 기반 ===== */
 function computeNodes(elements, wires, drawLib) {
 
-  // === 1) DSU ===
+  // --- 1) DSU 기본 구성 ---
   const pkey = (elId, portId) => `P:${elId}:${portId}`;
   const parents = {};
-  const find = (x) => (parents[x] === x ? x : (parents[x] = find(parents[x])));
-  const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parents[b] = a; };
 
-  // === 2) 모든 포트 등록 ===
+  const find = (x) => {
+    if (parents[x] === x) return x;
+    return parents[x] = find(parents[x]);
+  };
+
+  const union = (a, b) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parents[rb] = ra;
+  };
+
+  // --- 2) 모든 포트를 DSU에 등록 ---
   for (const el of elements) {
     const def = drawLib[el.type];
     if (!def?.ports) continue;
@@ -75,43 +84,64 @@ function computeNodes(elements, wires, drawLib) {
     }
   }
 
-  // === 3) wires → union(elId, portId) ===
+  // --- 3) wire 연결 → union 처리 ---
   for (const w of wires) {
     const a = pkey(w.a.el, w.a.portId);
     const b = pkey(w.b.el, w.b.portId);
-    if (parents[a] && parents[b]) union(a, b);
+    if (parents[a] && parents[b]) {
+      union(a, b);
+    }
   }
 
-  // === 4) 대표 group ===
+  // --- 4) ground 통합 처리 ---
+  // ground 타입 소자 or 포트명 "0"/"GND" → 모두 같은 루트("GNDROOT")로 묶음
+  parents["GNDROOT"] = "GNDROOT";
+
+  for (const el of elements) {
+    if (el.type === "ground") {
+      const def = drawLib[el.type];
+      if (!def?.ports) continue;
+      for (const p of def.ports) {
+        const pk = pkey(el.id, p.id);
+        if (parents[pk]) {
+          union("GNDROOT", pk);
+        }
+      }
+    }
+  }
+
+  // --- 5) 대표 그룹 → 노드번호 배정 ---
   const repGroups = {};
   for (const k of Object.keys(parents)) {
     const r = find(k);
     (repGroups[r] ??= []).push(k);
   }
 
-  // === 5) ground 처리 ===
   const repToNode = {};
   let seq = 1;
-  for (const [rep, keys] of Object.entries(repGroups)) {
-    const hasGnd = keys.some(k => {
-      const parts = k.split(":"); // ["P","elId","portId"]
-      const elId = parts[1];
-      const pid = parts[2];
+
+  for (const [rep, groupKeys] of Object.entries(repGroups)) {
+    // 그룹 내에 ground가 포함되면 노드번호 = 0
+    const isGroundGroup = groupKeys.some(full => {
+      const [_, elId, pid] = full.split(":");
       const el = elements.find(e => e.id === elId);
-      return drawLib[el.type]?.name === "ground" || pid === "0";
+      const isGndType = el?.type === "ground";
+      const isGndPort = pid === "0" || pid === "GND";
+      return isGndType || isGndPort;
     });
 
-    repToNode[rep] = hasGnd ? "0" : `N${seq++}`;
+    repToNode[rep] = isGroundGroup ? "0" : `N${seq++}`;
   }
 
-  // === 6) getNode(key) 반환 ===
+  // --- 6) getNode(key) 제공 ---
   return {
-    getNode: (key) => {
+    getNode(key) {
       const r = find(key);
       return repToNode[r];
     }
   };
 }
+
 
 
 /** ===== 모델 문자열 ===== */
