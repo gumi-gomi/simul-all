@@ -745,17 +745,33 @@ export default function CircuitCanvas({
               style={{ userSelect: "none" }}
             >
               {(() => {
-                if (el.type === "vsource") {
-                  switch (el.waveType) {
-                    case "DC":   return `DC ${el.dc || 0}V`;
-                    case "AC":   return `AC(${el.acMag || 1}, ${el.acPhase || 0}°)`;
-                    case "SIN":  return `SIN(${el.sin?.offset ?? 0}, ${el.sin?.amp ?? 1}, ${el.sin?.freq ?? 60})`;
-                    case "PULSE":return `PULSE(${el.pulse?.v1 ?? 0}→${el.pulse?.v2 ?? 5})`;
-                    case "EXP":  return `EXP(${el.exp?.v1 ?? 0}→${el.exp?.v2 ?? 5})`;
-                    case "PWL":  return `PWL(...)`;
-                    default:     return `Vsrc`;
-                  }
-                }
+               if (el.type === "vsource") {
+  const wave = (el.waveType || "DC").toUpperCase();
+
+  switch (wave) {
+    case "DC":
+      return `DC ${el.dc ?? 0}V`;
+
+    case "AC":
+      return `AC(${el.acMag ?? 1}, ${el.acPhase ?? 0}°)`;
+
+    case "SIN":
+      return `SIN(${el.sin?.offset ?? 0}, ${el.sin?.amp ?? 1}, ${el.sin?.freq ?? 60})`;
+
+    case "PULSE":
+      return `PULSE(${el.pulse?.v1 ?? 0}→${el.pulse?.v2 ?? 5})`;
+
+    case "EXP":
+      return `EXP(${el.exp?.v1 ?? 0}→${el.exp?.v2 ?? 5})`;
+
+    case "PWL":
+      return `PWL(...)`;
+
+    default:
+      return `Vsrc`;
+  }
+}
+
                 if (el.type === "resistor")  return `${el.value ?? ""}Ω`;
                 if (el.type === "capacitor") return `${el.value ?? ""}F`;
                 if (el.type === "inductor")  return `${el.value ?? ""}H`;
@@ -833,7 +849,16 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
     setElements((els) => els.map((it) => (it.id === el.id ? { ...it, ...patch } : it)));
   };
 
-  const NO_VALUE = ["ground", "vsource", "npn", "pnp", "nmos", "pmos", "opamp", "transformer", "diode", "led", "zener"];
+  const NO_VALUE = [
+    "ground", "npn", "pnp", "nmos", "pmos",
+    "opamp", "transformer", "diode", "led", "zener"
+  ];
+
+  const inputStyle = {
+    width: "90%",
+    padding: "3px",
+    fontSize: 12,
+  };
 
   return (
     <div
@@ -845,29 +870,320 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
         background: "#fff",
         border: "1px solid #ccc",
         borderRadius: 6,
-        padding: "10px",
+        padding: 10,
         fontSize: 12,
         zIndex: 1000,
         boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-        minWidth: "200px",
+        minWidth: 220,
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div style={{ fontWeight: "bold", marginBottom: 8 }}>
-        {el.id}
-      </div>
+      <div style={{ fontWeight: "bold", marginBottom: 8 }}>{el.id}</div>
 
-      {!NO_VALUE.includes(el.type) && (
-        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "6px", marginBottom: 10 }}>
+      {/* -----------------------------  
+          일반 component VALUE 입력
+      ------------------------------ */}
+      {!NO_VALUE.includes(el.type) && el.type !== "vsource" && (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "80px 1fr",
+          gap: 6,
+          marginBottom: 10,
+        }}>
           <div>Value</div>
           <input
-            style={{ width: "90%", padding: "3px" }}
+            style={inputStyle}
             value={el.value || ""}
             onChange={(e) => updateField({ value: e.target.value })}
           />
         </div>
       )}
 
+      {/* -----------------------------
+          VSOURCE 전용 UI
+      ------------------------------ */}
+      {el.type === "vsource" && (
+        <>
+          {/* Wave Type */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "80px 1fr",
+            gap: 6,
+            marginBottom: 10,
+          }}>
+            <div>Wave</div>
+            <select
+              style={inputStyle}
+              value={el.waveType || "DC"}
+              onChange={(e) => updateField({ waveType: e.target.value })}
+            >
+              <option value="DC">DC</option>
+              <option value="AC">AC</option>
+              <option value="SIN">SIN</option>
+            </select>
+          </div>
+
+          {/* DC MODE */}
+          {(el.waveType || "DC") === "DC" && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "80px 1fr",
+              gap: 6,
+              marginBottom: 10,
+            }}>
+              <div>DC (V)</div>
+              <input
+                style={inputStyle}
+                value={el.dc ?? ""}
+                onChange={(e) => updateField({ dc: e.target.value })}
+              />
+            </div>
+          )}
+
+          {/* AC MODE */}
+          {(el.waveType || "DC") === "AC" && (
+            <>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "80px 1fr",
+                gap: 6,
+                marginBottom: 10,
+              }}>
+                <div>AC Mag</div>
+                <input
+                  style={inputStyle}
+                  value={el.acMag ?? ""}
+                  onChange={(e) => updateField({ acMag: e.target.value })}
+                />
+              </div>
+
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "80px 1fr",
+                gap: 6,
+                marginBottom: 10,
+              }}>
+                <div>AC Phase</div>
+                <input
+                  style={inputStyle}
+                  value={el.acPhase ?? ""}
+                  onChange={(e) => updateField({ acPhase: e.target.value })}
+                />
+              </div>
+            </>
+          )}
+
+          {/* SIN MODE */}
+          {(el.waveType || "DC") === "SIN" && (
+            <>
+              {[
+                ["offset", "Offset"],
+                ["amp", "Amplitude"],
+                ["freq", "Freq (Hz)"],
+                ["td", "Delay"],
+                ["theta", "Theta"],
+                ["phi", "Phase"],
+              ].map(([key, label]) => (
+                <div
+                  key={key}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "80px 1fr",
+                    gap: 6,
+                    marginBottom: 10,
+                  }}
+                >
+                  <div>{label}</div>
+                  <input
+                    style={inputStyle}
+                    value={el.sin?.[key] ?? ""}
+                    onChange={(e) =>
+                      updateField({
+                        sin: { ...el.sin, [key]: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </>
+          )}
+        </>
+      )}
+
+      {/* === 전원(UI) === */}
+{el.type === "vsource" && (
+  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 6, marginBottom: 10 }}>
+    <div>Wave</div>
+    <select
+      value={el.waveType || "DC"}
+      onChange={(e) => updateField({ waveType: e.target.value })}
+      style={{ padding: "3px" }}
+    >
+      <option value="DC">DC</option>
+      <option value="AC">AC</option>
+      <option value="SIN">SIN</option>
+    </select>
+
+    {/* DC */}
+    {(el.waveType || "DC") === "DC" && (
+      <>
+        <div>DC (V)</div>
+        <input
+          value={el.dc ?? el.value ?? ""}
+          onChange={(e) => updateField({ dc: e.target.value })}
+          style={{ padding: "3px" }}
+        />
+      </>
+    )}
+
+    {/* AC */}
+    {(el.waveType || "DC") === "AC" && (
+      <>
+        <div>Mag</div>
+        <input
+          value={el.acMag ?? el.value ?? 1}
+          onChange={(e) => updateField({ acMag: e.target.value })}
+          style={{ padding: "3px" }}
+        />
+        <div>Phase (°)</div>
+        <input
+          value={el.acPhase ?? 0}
+          onChange={(e) => updateField({ acPhase: e.target.value })}
+          style={{ padding: "3px" }}
+        />
+      </>
+    )}
+
+    {/* SIN */}
+    {(el.waveType || "DC") === "SIN" && (
+      <>
+        <div>Offset</div>
+        <input
+          value={el.sin?.offset ?? 0}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), offset: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Amp</div>
+        <input
+          value={el.sin?.amp ?? el.value ?? 1}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), amp: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Freq (Hz)</div>
+        <input
+          value={el.sin?.freq ?? 60}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), freq: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Delay</div>
+        <input
+          value={el.sin?.td ?? 0}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), td: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Theta</div>
+        <input
+          value={el.sin?.theta ?? 0}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), theta: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Phase</div>
+        <input
+          value={el.sin?.phi ?? 0}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), phi: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+      </>
+    )}
+  </div>
+)}
+
+{el.type === "isource" && (
+  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 6, marginBottom: 10 }}>
+    <div>Wave</div>
+    <select
+      value={el.waveType || "DC"}
+      onChange={(e) => updateField({ waveType: e.target.value })}
+      style={{ padding: "3px" }}
+    >
+      <option value="DC">DC</option>
+      <option value="AC">AC</option>
+      <option value="SIN">SIN</option>
+    </select>
+
+    {(el.waveType || "DC") === "DC" && (
+      <>
+        <div>DC (A)</div>
+        <input
+          value={el.dc ?? el.value ?? ""}
+          onChange={(e) => updateField({ dc: e.target.value })}
+          style={{ padding: "3px" }}
+        />
+      </>
+    )}
+
+    {(el.waveType || "DC") === "AC" && (
+      <>
+        <div>Mag</div>
+        <input
+          value={el.acMag ?? el.value ?? 1}
+          onChange={(e) => updateField({ acMag: e.target.value })}
+          style={{ padding: "3px" }}
+        />
+        <div>Phase (°)</div>
+        <input
+          value={el.acPhase ?? 0}
+          onChange={(e) => updateField({ acPhase: e.target.value })}
+          style={{ padding: "3px" }}
+        />
+      </>
+    )}
+
+    {(el.waveType || "DC") === "SIN" && (
+      <>
+        <div>Offset</div>
+        <input
+          value={el.sin?.io ?? el.sin?.offset ?? 0}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), io: e.target.value, offset: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Amp</div>
+        <input
+          value={el.sin?.ia ?? el.sin?.amp ?? el.value ?? 1e-3}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), ia: e.target.value, amp: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Freq (Hz)</div>
+        <input
+          value={el.sin?.freq ?? 60}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), freq: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Delay</div>
+        <input
+          value={el.sin?.td ?? 0}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), td: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Theta</div>
+        <input
+          value={el.sin?.theta ?? 0}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), theta: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+        <div>Phase</div>
+        <input
+          value={el.sin?.phi ?? 0}
+          onChange={(e) => updateField({ sin: { ...(el.sin||{}), phi: e.target.value } })}
+          style={{ padding: "3px" }}
+        />
+      </>
+    )}
+  </div>
+)}
+
+
+      {/* Rotate (vsource 제외) */}
       <button
         style={{
           width: "100%",
@@ -879,7 +1195,10 @@ function InspectorPopup({ inspector, elements, setElements, setInspector, pan, z
           cursor: "pointer",
         }}
         onClick={() => {
-          if (["npn", "pnp", "nmos", "pmos", "opamp", "transformer"].includes(el.type) || isRawSymbol(el.type)) return;
+          if (
+            ["npn", "pnp", "nmos", "pmos", "opamp", "transformer"].includes(el.type)
+          )
+            return;
           updateField({ rot: (el.rot + 90) % 360 });
         }}
       >

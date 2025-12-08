@@ -53,6 +53,8 @@ const DEFAULTS = {
   TRAN: { step: "1m", stop: "1s" },
 };
 
+
+
 /** 숫자/문자 단위 허용 */
 const fmtVal = (v) => (typeof v === "number" ? String(v) : (v ?? ""));
 
@@ -158,6 +160,15 @@ export function generateNetlist(elements, wires, drawLib, opts = {}) {
   const extras = [];
   const ref = { R:0, C:0, L:0, V:0, I:0, D:0, Q:0, M:0, K:0, Lxf:0, E:0 };
 
+  // ===== 유틸: 값 안전 파싱 (문자 "12V" → 12 숫자; 숫자는 그대로 유지)
+const numOr = (v, fallback = 0) => {
+  if (v === undefined || v === null) return fallback;
+  if (typeof v === "number") return v;
+  const n = parseFloat(String(v).replace(/[^\d.-]/g, ""));
+  return Number.isNaN(n) ? fallback : n;
+};
+
+
   const header = [
     `* ELECHUB AUTO-GENERATED NETLIST`,
     `.title ELECHUB_CIRCUIT`,
@@ -176,47 +187,63 @@ export function generateNetlist(elements, wires, drawLib, opts = {}) {
 
     /** 1) R */
     if (t === "resistor") {
-      const name = `R${++ref.R}`;
-      const v = el.value ?? DEFAULTS.R.value;
-      lines.push(`${name} ${ports["1"]} ${ports["2"]} ${v}`);
-      continue;
-    }
+  const name = `R${++ref.R}`;
+  const v = el.value ?? DEFAULTS.R.value; // "1k" 그대로 허용
+  lines.push(`${name} ${ports["1"]} ${ports["2"]} ${v}`);
+  continue;
+}
     /** 2) C */
-    if (t === "capacitor" || t === "capacitor_polarized") {
-      const name = `C${++ref.C}`;
-      const v = el.value ?? DEFAULTS.C.value;
-      lines.push(`${name} ${ports["1"]} ${ports["2"]} ${v}`);
-      continue;
-    }
+   if (t === "capacitor" || t === "capacitor_polarized") {
+  const name = `C${++ref.C}`;
+  const v = el.value ?? DEFAULTS.C.value; // "100uF" 등 그대로 허용
+  lines.push(`${name} ${ports["1"]} ${ports["2"]} ${v}`);
+  continue;
+}
     /** 3) L */
     if (t === "inductor") {
-      const name = `L${++ref.L}`;
-      const v = el.value ?? DEFAULTS.L.value;
-      lines.push(`${name} ${ports["1"]} ${ports["2"]} ${v}`);
-      continue;
-    }
+  const name = `L${++ref.L}`;
+  const v = el.value ?? DEFAULTS.L.value;
+  lines.push(`${name} ${ports["1"]} ${ports["2"]} ${v}`);
+  continue;
+}
 
-    /** 4) Vsource */
-    if (t === "vsource") {
-      const name = `V${++ref.V}`;
-      const plus = ports["+"] ?? "0";
-      const minus = ports["-"] ?? "0";
-      const wave = (el.waveType || DEFAULTS.VSRC.waveType).toUpperCase();
-      let s = `${name} ${plus} ${minus}`;
+  /** 4) Vsource */
+if (t === "vsource") {
+  const name  = `V${++ref.V}`;
+  const plus  = ports["+"] ?? "0";
+  const minus = ports["-"] ?? "0";
+  const wave  = (el.waveType || "DC").toUpperCase();
 
-      if (wave === "DC") {
-        s += ` DC ${fmtVal(el.dc ?? DEFAULTS.VSRC.dc)}`;
-      } else if (wave === "AC") {
-        s += ` AC ${fmtVal(el.ac ?? DEFAULTS.VSRC.ac)}`;
-      } else if (wave === "SIN") {
-        const sin = el.sin || DEFAULTS.VSRC.sin;
-        s += ` SIN(${fmtVal(sin.vo)} ${fmtVal(sin.va)} ${fmtVal(sin.freq)} ${fmtVal(sin.td)} ${fmtVal(sin.theta)} ${fmtVal(sin.phi)})`;
-      } else {
-        s += ` DC 0`;
-      }
-      lines.push(s);
-      continue;
-    }
+  let s = `${name} ${plus} ${minus}`;
+
+  if (wave === "DC") {
+    const dc = el.dc ?? el.value ?? DEFAULTS.VSRC.dc;
+    s += ` DC ${fmtVal(dc)}`;
+  } else if (wave === "AC") {
+    const mag   = el.acMag   ?? el.value ?? 1;
+    const phase = el.acPhase ?? 0;
+    s += ` AC ${fmtVal(mag)} ${fmtVal(phase)}`;
+  } else if (wave === "SIN") {
+    const sin = el.sin || {};
+    const vo   = sin.offset ?? 0;
+    const va   = sin.amp    ?? el.value ?? 1;
+    const freq = sin.freq   ?? 60;
+    const td   = sin.td     ?? 0;
+    const theta= sin.theta  ?? 0;
+    const phi  = sin.phi    ?? 0;
+    s += ` SIN(${fmtVal(vo)} ${fmtVal(va)} ${fmtVal(freq)} ${fmtVal(td)} ${fmtVal(theta)} ${fmtVal(phi)})`;
+  } else {
+    // fallback
+    const dc = el.dc ?? el.value ?? DEFAULTS.VSRC.dc;
+    s += ` DC ${fmtVal(dc)}`;
+  }
+
+  lines.push(s);
+  continue;
+}
+
+
+
     /**  crystal */
     if (t === "crystal") {
   const name = `X${++ref.X}`;
@@ -237,25 +264,39 @@ C2 4 2 0.02p
 
 
     /** 5) ISource */
-    if (t === "isource") {
-      const name = `I${++ref.I}`;
-      const p = ports["p"], n = ports["n"];
-      const wave = (el.waveType || DEFAULTS.ISRC.waveType).toUpperCase();
-      let s = `${name} ${p} ${n}`;
+  if (t === "isource") {
+  const name  = `I${++ref.I}`;
+  const p = ports["p"] ?? "0";
+  const n = ports["n"] ?? "0";
+  const wave = (el.waveType || DEFAULTS.ISRC.waveType).toUpperCase();
 
-      if (wave === "DC") {
-        s += ` DC ${fmtVal(el.dc ?? DEFAULTS.ISRC.dc)}`;
-      } else if (wave === "AC") {
-        s += ` AC ${fmtVal(el.ac ?? DEFAULTS.ISRC.ac)}`;
-      } else if (wave === "SIN") {
-        const sin = el.sin || DEFAULTS.ISRC.sin;
-        s += ` SIN(${fmtVal(sin.io)} ${fmtVal(sin.ia)} ${fmtVal(sin.freq)} ${fmtVal(sin.td)} ${fmtVal(sin.theta)} ${fmtVal(sin.phi)})`;
-      } else {
-        s += ` DC 0`;
-      }
-      lines.push(s);
-      continue;
-    }
+  let s = `${name} ${p} ${n}`;
+
+  if (wave === "DC") {
+    const dc = el.dc ?? el.value ?? DEFAULTS.ISRC.dc;
+    s += ` DC ${fmtVal(dc)}`;
+  } else if (wave === "AC") {
+    const mag   = el.acMag   ?? el.value ?? DEFAULTS.ISRC.ac;
+    const phase = el.acPhase ?? 0;
+    s += ` AC ${fmtVal(mag)} ${fmtVal(phase)}`;
+  } else if (wave === "SIN") {
+    const sin = el.sin || {};
+    // 전류원은 io/ia 키를 쓸 수도 있고 offset/amp로 올 수도 있으니 넓게 허용
+    const io   = sin.io    ?? sin.offset ?? 0;
+    const ia   = sin.ia    ?? sin.amp    ?? el.value ?? 1e-3;
+    const freq = sin.freq  ?? 60;
+    const td   = sin.td    ?? 0;
+    const theta= sin.theta ?? 0;
+    const phi  = sin.phi   ?? 0;
+    s += ` SIN(${fmtVal(io)} ${fmtVal(ia)} ${fmtVal(freq)} ${fmtVal(td)} ${fmtVal(theta)} ${fmtVal(phi)})`;
+  } else {
+    const dc = el.dc ?? el.value ?? DEFAULTS.ISRC.dc;
+    s += ` DC ${fmtVal(dc)}`;
+  }
+
+  lines.push(s);
+  continue;
+}
 
     /** 6) Diode / LED / Zener */
     if (t === "diode" || t === "led" || t === "zener") {
