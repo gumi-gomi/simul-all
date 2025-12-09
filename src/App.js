@@ -14,6 +14,8 @@ import { SYMBOL_CATEGORIES } from "./simulator/symbolCategories";
 import { makeMiniSymbol } from "./simulator/makeSvgMini";
 import { normalizeCircuitJson } from "./simulator/normalizeCircuit";
 
+
+
 // 백엔드 NGSPICE 실행 API
 import { simulateCircuit } from "./api/simulate";
 
@@ -35,6 +37,8 @@ const snap = (v) => Math.round(v / GRID) * GRID;
 function uid(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
+
+console.log("DRAW_LIB keys:", Object.keys(DRAW_LIB));
 
 function getIdPrefix(type) {
   const map = {
@@ -93,6 +97,9 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [search, setSearch] = useState("");
 
+    const [symbolsLoaded, setSymbolsLoaded] = useState(false);
+
+    
   async function handleSim() {
     if (!circuitJson) {
       alert("회로 JSON이 없습니다.");
@@ -147,11 +154,23 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
+      console.log("🔥 Loading symbol packages...");
       await loadJsonSymbolPackages();
+
+      console.log("🔥 Rebuilding GPT_LIB");
       rebuildGPTLib();
+
+      console.log("🔥 Symbol loading finished. Keys:", Object.keys(DRAW_LIB));
+      setSymbolsLoaded(true);
     }
+
     init();
   }, []);
+
+    if (!symbolsLoaded) {
+    return <div style={{ padding: 50 }}>⏳ Loading symbols...</div>;
+  }
+
 
   return (
     <>
@@ -311,13 +330,17 @@ export default function App() {
 
         {/* Canvas */}
         <CircuitCanvas
-          elements={elements}
-          setElements={setElements}
-          wires={wires}
-          setWires={setWires}
-          draggingType={draggingType}
-          setDraggingType={setDraggingType}
-        />
+  elements={elements.filter(Boolean)}       // ⬅ undefined 제거
+  setElements={(fn) =>
+    setElements((prev) => fn(prev.filter(Boolean)))
+  }
+  wires={wires.filter(Boolean)}             // ⬅ undefined 제거
+  setWires={(fn) =>
+    setWires((prev) => fn(prev.filter(Boolean)))
+  }
+  draggingType={draggingType}
+  setDraggingType={setDraggingType}
+/>
       </div>
 
       {/* 시뮬레이션 결과 */}

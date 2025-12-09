@@ -191,13 +191,26 @@ export default function CircuitCanvas({
   const bboxCache = useRef(new Map());
 
   /** BBox 캐시 */
-  function getBBox(el) {
-    const key = `${el.id}_${el.rot}_${el.x}_${el.y}`;
-    if (bboxCache.current.has(key)) return bboxCache.current.get(key);
-    const box = computeElementBBox(el);
-    bboxCache.current.set(key, box);
-    return box;
+ function getBBox(el) {
+  const key = `${el.id}_${el.rot}_${el.x}_${el.y}`;
+
+  if (bboxCache.current.has(key)) {
+    const cached = bboxCache.current.get(key);
+    if (!cached) return { x: el.x, y: el.y, w: 40, h: 40 }; // fallback
+    return cached;
   }
+
+  let box = computeElementBBox(el);
+
+  // 🔥 null 또는 잘못된 bbox 대응
+  if (!box || box.w === undefined || box.h === undefined) {
+    box = { x: el.x, y: el.y, w: 40, h: 40 };  // 기본 박스
+  }
+
+  bboxCache.current.set(key, box);
+  return box;
+}
+
 
   /** 포트 절대 위치 */
   function portAbsolutePosition(el, port) {
@@ -686,127 +699,114 @@ export default function CircuitCanvas({
           );
         })()}
 
-        {elements.map((el) => (
-          <g
-            key={el.id}
-            style={{
-              color: selected.includes(el.id) ? "#2b8cff" : "currentColor",
-            }}
-          >
-            {(() => {
-              const box = getBBox(el);
-              const draggingThis = !!(drag && drag.ids && drag.ids.includes(el.id));
-              return (
-                <rect
-                  x={box.x}
-                  y={box.y}
-                  width={box.w}
-                  height={box.h}
-                  fill="transparent"
-                  pointerEvents="all"
-                  onMouseDown={(e) => onMouseDownPart(e, el)}
-                  style={{ cursor: draggingThis ? "grabbing" : "grab" }}
-                />
-              );
-            })()}
+      {elements
+  .filter((el) => el && el.type && DRAW_LIB[el.type]) // 🔥 요소 자체 + symbol 존재 여부 검사
+  .map((el) => (
+    <g
+      key={el.id}
+      style={{
+        color: selected.includes(el.id) ? "#2b8cff" : "currentColor",
+      }}
+    >
+      {/* Bounding box */}
+      {(() => {
+        const box = getBBox(el);
+        const draggingThis = !!(drag && drag.ids && drag.ids.includes(el.id));
+        return (
+          <rect
+            x={box.x}
+            y={box.y}
+            width={box.w}
+            height={box.h}
+            fill="transparent"
+            pointerEvents="all"
+            onMouseDown={(e) => onMouseDownPart(e, el)}
+            style={{ cursor: draggingThis ? "grabbing" : "grab" }}
+          />
+        );
+      })()}
 
-            {DRAW_LIB[el.type].draw(el)}
+      {/* 🔥 draw 호출도 보호 */}
+      {DRAW_LIB[el.type]?.draw(el)}
 
-            {/* RefDes 표시 */}
-            <text
-              x={el.x + DRAW_LIB[el.type].w / 2}
-              y={el.y + DRAW_LIB[el.type].h + 2}
-              textAnchor="middle"
-              fontSize="12"
-              fill={selected.includes(el.id) ? "#2b8cff" : "#555"}
-              style={{ userSelect: "none" }}
-            >
-              {(() => {
-                const map = {
-                  resistor: "R", capacitor: "C", inductor: "L",
-                  vsource: "V", ground: "G",
-                  diode: "D",  led: "D",
-                  npn: "Q",    pnp: "Q",
-                  nmos: "M",   pmos: "M",
-                };
-                const prefix = map[el.type] || "X";
-                const index = elements.filter((e) => e.type === el.type).indexOf(el) + 1;
-                return `${prefix}${index}`;
-              })()}
-            </text>
+      {/* RefDes */}
+      <text
+        x={el.x + (DRAW_LIB[el.type]?.w ?? 0) / 2}
+        y={el.y + (DRAW_LIB[el.type]?.h ?? 0) + 2}
+        textAnchor="middle"
+        fontSize="12"
+        fill={selected.includes(el.id) ? "#2b8cff" : "#555"}
+        style={{ userSelect: "none" }}
+      >
+        {(() => {
+          const map = {
+            resistor: "R", capacitor: "C", inductor: "L",
+            vsource: "V", ground: "G",
+            diode: "D", led: "D",
+            npn: "Q", pnp: "Q",
+            nmos: "M", pmos: "M",
+          };
+          const prefix = map[el.type] || "X";
+          const index = elements.filter((e) => e?.type === el.type).indexOf(el) + 1;
+          return `${prefix}${index}`;
+        })()}
+      </text>
 
-            {/* value / 파형 표시 */}
-            <text
-              x={el.x + DRAW_LIB[el.type].w / 2}
-              y={el.y + DRAW_LIB[el.type].h + 16}
-              textAnchor="middle"
-              fontSize="12"
-              fill={selected.includes(el.id) ? "#2b8cff" : "#333"}
-              style={{ userSelect: "none" }}
-            >
-              {(() => {
-               if (el.type === "vsource") {
-  const wave = (el.waveType || "DC").toUpperCase();
+      {/* value / wave */}
+      <text
+        x={el.x + (DRAW_LIB[el.type]?.w ?? 0) / 2}
+        y={el.y + (DRAW_LIB[el.type]?.h ?? 0) + 16}
+        textAnchor="middle"
+        fontSize="12"
+        fill={selected.includes(el.id) ? "#2b8cff" : "#333"}
+        style={{ userSelect: "none" }}
+      >
+        {(() => {
+          if (el.type === "vsource") {
+            const wave = (el.waveType || "DC").toUpperCase();
+            switch (wave) {
+              case "DC":   return `DC ${el.dc ?? 0}V`;
+              case "AC":   return `AC(${el.acMag ?? 1}, ${el.acPhase ?? 0}°)`;
+              case "SIN":  return `SIN(${el.sin?.offset ?? 0}, ${el.sin?.amp ?? 1}, ${el.sin?.freq ?? 60})`;
+              case "PULSE":return `PULSE(${el.pulse?.v1 ?? 0}→${el.pulse?.v2 ?? 5})`;
+              case "EXP":  return `EXP(${el.exp?.v1 ?? 0}→${el.exp?.v2 ?? 5})`;
+              case "PWL":  return `PWL(...)`;
+              default:     return `Vsrc`;
+            }
+          }
+          if (el.type === "resistor")  return `${el.value ?? ""}Ω`;
+          if (el.type === "capacitor") return `${el.value ?? ""}F`;
+          if (el.type === "inductor")  return `${el.value ?? ""}H`;
+          return el.value ?? "";
+        })()}
+      </text>
 
-  switch (wave) {
-    case "DC":
-      return `DC ${el.dc ?? 0}V`;
+      {/* ports */}
+      {(DRAW_LIB[el.type]?.ports ?? []).map((p) => {
+        if (!p || p.x === undefined || p.y === undefined) return null;
+        const { x: rx, y: ry } = portAbsolutePosition(el, p);
+        return (
+          <circle
+            key={`${el.id}-${p.id}`}
+            cx={rx}
+            cy={ry}
+            r={PORT_R}
+            fill={
+              connectFrom && connectFrom.elId === el.id && connectFrom.portId === p.id
+                ? "#2b8cff"
+                : "#fff"
+            }
+            stroke="#2b8cff"
+            strokeWidth={2}
+            onMouseDown={(e) => handlePortMouseDown(e, el.id, p.id)}
+            onMouseUp={(e) => handlePortMouseUp(e, el.id, p.id)}
+            style={{ cursor: "crosshair" }}
+          />
+        );
+      })}
+    </g>
+  ))}
 
-    case "AC":
-      return `AC(${el.acMag ?? 1}, ${el.acPhase ?? 0}°)`;
-
-    case "SIN":
-      return `SIN(${el.sin?.offset ?? 0}, ${el.sin?.amp ?? 1}, ${el.sin?.freq ?? 60})`;
-
-    case "PULSE":
-      return `PULSE(${el.pulse?.v1 ?? 0}→${el.pulse?.v2 ?? 5})`;
-
-    case "EXP":
-      return `EXP(${el.exp?.v1 ?? 0}→${el.exp?.v2 ?? 5})`;
-
-    case "PWL":
-      return `PWL(...)`;
-
-    default:
-      return `Vsrc`;
-  }
-}
-
-                if (el.type === "resistor")  return `${el.value ?? ""}Ω`;
-                if (el.type === "capacitor") return `${el.value ?? ""}F`;
-                if (el.type === "inductor")  return `${el.value ?? ""}H`;
-                return el.value ?? "";
-              })()}
-            </text>
-
-            {/* 포트 */}
-            {(DRAW_LIB[el.type].ports || []).map((p) => {
-              if (!p || p.x === undefined || p.y === undefined) {
-                console.warn("Invalid port in symbol:", el.type, p);
-                return null;
-              }
-              const { x: rx, y: ry } = portAbsolutePosition(el, p);
-              return (
-                <circle
-                  key={`${el.id}-${p.id}`}
-                  cx={rx}
-                  cy={ry}
-                  r={PORT_R}
-                  fill={
-                    connectFrom && connectFrom.elId === el.id && connectFrom.portId === p.id
-                      ? "#2b8cff"
-                      : "#fff"
-                  }
-                  stroke="#2b8cff"
-                  strokeWidth={2}
-                  onMouseDown={(e) => handlePortMouseDown(e, el.id, p.id)}
-                  onMouseUp={(e) => handlePortMouseUp(e, el.id, p.id)}
-                  style={{ cursor: "crosshair" }}
-                />
-              );
-            })}
-          </g>
-        ))}
 
         {/* 박스 선택 */}
         {box && (
